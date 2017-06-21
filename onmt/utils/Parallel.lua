@@ -6,8 +6,24 @@
 local Parallel = {
   _pool = nil,
   count = 1,
+  ompThreads = 1,
   gradBuffer = torch.Tensor()
 }
+
+local options = {
+  {
+    '-nparallel', 1,
+    [[Number of parallel threads to run training on CPU.]]
+  },
+  {
+    '-nompthreads', 44,
+    [[Number of OpenMP threads used by each parallel thread.]]
+  }
+}
+
+function Parallel.declareOpts(cmd)
+  cmd:setCmdLineOptions(options, 'Parallel')
+end
 
 -- Synchronizes the current stream on dst device with src device. This is only
 -- necessary if we are not on the default stream
@@ -27,6 +43,10 @@ function Parallel.gmutexId()
 end
 
 function Parallel.init(opt)
+  Parallel.count = opt.nparallel
+  Parallel.ompThreads = math.min(opt.nompthreads, math.floor(torch.getnumthreads()/Parallel.count))
+  _G.logger:info("Running "..Parallel.count.." parallel threads")
+
   if onmt.utils.Cuda.activated then
     Parallel.count = onmt.utils.Cuda.gpuCount()
     Parallel.gradBuffer = onmt.utils.Cuda.convert(Parallel.gradBuffer)

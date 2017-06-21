@@ -27,6 +27,7 @@ onmt.train.Trainer.declareOpts(cmd)
 onmt.utils.CrayonLogger.declareOpts(cmd)
 onmt.utils.Cuda.declareOpts(cmd)
 onmt.utils.Logger.declareOpts(cmd)
+onmt.utils.Parallel.declareOpts(cmd)
 
 cmd:text('')
 cmd:text('Other options')

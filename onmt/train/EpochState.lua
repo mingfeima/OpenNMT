@@ -36,7 +36,7 @@ end
 function EpochState:log(iteration)
   local ppl = math.exp(self.trainLoss / self.targetWords)
   local tokpersec = self.sourceWords / self.timer:time().real
-  _G.logger:info('Epoch %d ; Iteration %d/%d ; %s ; Source tokens/s %d ; Perplexity %.2f; Time %.3f sec',
+  _G.logger:info('Epoch %d ; Iteration %d/%d ; %s ; Source tokens/s %d ; Perplexity %.2f ; Time %.3f sec',
                   self.epoch,
                   iteration or self.iterations, self.numIterations,
                   self.optimStatus,
