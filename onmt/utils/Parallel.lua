@@ -12,7 +12,7 @@ local Parallel = {
 
 local options = {
   {
-    '-nparallel', 1,
+    '-nparallel', 4,
     [[Number of parallel threads to run training on CPU.]]
   },
   {
@@ -28,10 +28,12 @@ end
 -- Synchronizes the current stream on dst device with src device. This is only
 -- necessary if we are not on the default stream
 local function waitForDevice(dst, src)
-   local stream = cutorch.getStream()
-   if stream ~= 0 then
-      cutorch.streamWaitForMultiDevice(dst, stream, { [src] = {stream} })
-   end
+  if onmt.utils.Cuda.activated then
+    local stream = cutorch.getStream()
+      if stream ~= 0 then
+        cutorch.streamWaitForMultiDevice(dst, stream, { [src] = {stream} })
+      end
+  end
 end
 
 function Parallel.getCounter()
@@ -44,24 +46,24 @@ end
 
 function Parallel.init(opt)
   Parallel.count = opt.nparallel
-  Parallel.ompThreads = math.min(opt.nompthreads, math.floor(torch.getnumthreads()/Parallel.count))
+  Parallel.ompThreads = math.min(opt.nompthreads, math.floor(torch.getnumcores()/Parallel.count))
   _G.logger:info("Running "..Parallel.count.." parallel threads")
+  _G.logger:info("OMP num threads "..Parallel.ompThreads)
 
-  if onmt.utils.Cuda.activated then
-    Parallel.count = onmt.utils.Cuda.gpuCount()
-    Parallel.gradBuffer = onmt.utils.Cuda.convert(Parallel.gradBuffer)
+  if Parallel.count > 1 then
     Parallel._tds = require('tds')
 
     if Parallel.count > 1 then
       local globalLogger = _G.logger
       local globalProfiler = _G.profiler
       local threads = require('threads')
+      local ompThreads = Parallel.ompThreads
       threads.Threads.serialization('threads.sharedserialize')
       Parallel._gmutex = threads.Mutex()
       Parallel._pool = threads.Threads(
         Parallel.count,
         function()
-          require('cunn')
+          require('sys')
           require('nngraph')
           require('onmt.init')
           _G.threads = require('threads')
@@ -69,25 +71,13 @@ function Parallel.init(opt)
         function(threadid)
           _G.logger = globalLogger
           _G.profiler = globalProfiler
-          onmt.utils.Cuda.init(opt, threadid)
+          torch.setnumthreads(ompThreads)
         end
       ) -- dedicate threads to GPUs
       Parallel._pool:specific(true)
     end
 
-    if Parallel.count > 1 and not opt.no_nccl and not opt.async_parallel then
-      -- check if we have nccl installed
-      local ret
-      ret, Parallel.usenccl = pcall(require, 'nccl')
-      if not ret then
-        _G.logger:warning("For improved efficiency with multiple GPUs, consider installing nccl")
-        Parallel.usenccl = nil
-      elseif os.getenv('CUDA_LAUNCH_BLOCKING') == '1' then
-        _G.logger:warning("CUDA_LAUNCH_BLOCKING set - cannot use nccl")
-        Parallel.usenccl = nil
-      end
-    end
-
+    Parallel.usenccl = nil
   end
 end
 
@@ -112,23 +102,7 @@ function Parallel.accGradParams(gradParams, batches)
     for h = 1, #gradParams[1] do
       local inputs = { gradParams[1][h] }
       for j = 2, #batches do
-        if not Parallel.usenccl then
-          -- TODO - this is memory costly since we need to clone full parameters from one GPU to another
-          -- to avoid out-of-memory, we can copy/add by batch
-
-         -- Synchronize before and after copy to ensure that it doesn't overlap
-         -- with this add or previous adds
-          waitForDevice(onmt.utils.Cuda.gpuIds[j], onmt.utils.Cuda.gpuIds[1])
-          local remoteGrads = onmt.utils.Tensor.reuseTensor(Parallel.gradBuffer, gradParams[j][h]:size())
-          remoteGrads:copy(gradParams[j][h])
-          waitForDevice(onmt.utils.Cuda.gpuIds[1], onmt.utils.Cuda.gpuIds[j])
-          gradParams[1][h]:add(remoteGrads)
-        else
-          table.insert(inputs, gradParams[j][h])
-        end
-      end
-      if Parallel.usenccl then
-        Parallel.usenccl.reduce(inputs, nil, true)
+        gradParams[1][h]:add(gradParams[j][h])
       end
     end
   end

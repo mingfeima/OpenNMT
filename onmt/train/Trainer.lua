@@ -182,11 +182,11 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
         table.insert(batches, data:getBatch(batchIdx))
         totalSize = totalSize + batches[#batches].size
       end
-
       local losses = {}
       local indvAvgLosses = {}
 
       onmt.utils.Parallel.launch(function(idx)
+        sys.tic()
         _G.profiler = onmt.utils.Profiler.new(doProfile)
 
         _G.batch = batches[idx]
@@ -200,6 +200,8 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
 
         optim:zeroGrad(_G.gradParams)
         local loss, indvAvgLoss = _G.model:trainNetwork(_G.batch)
+
+        print(string.format('TH [%d] OMP %d time %.3f sec', __threadid, torch.getnumthreads(), sys.toc()))
 
         return idx, loss, indvAvgLoss, _G.profiler:dump()
       end,
