@@ -36,12 +36,13 @@ end
 function EpochState:log(iteration)
   local ppl = math.exp(self.trainLoss / self.targetWords)
   local tokpersec = self.sourceWords / self.timer:time().real
-  _G.logger:info('Epoch %d ; Iteration %d/%d ; %s ; Source tokens/s %d ; Perplexity %.2f',
+  _G.logger:info('Epoch %d ; Iteration %d/%d ; %s ; Source tokens/s %d ; Perplexity %.2f; Time %.3f sec',
                   self.epoch,
                   iteration or self.iterations, self.numIterations,
                   self.optimStatus,
                   tokpersec,
-                  ppl)
+                  ppl,
+                  self.timer:time().real)
   if _G.crayon_logger.on == true then
      _G.crayon_logger.exp:add_scalar_value("learning_rate", self.learningRate)
      _G.crayon_logger.exp:add_scalar_value("perplexity", ppl)
