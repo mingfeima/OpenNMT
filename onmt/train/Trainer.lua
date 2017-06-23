@@ -185,6 +185,7 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
       local losses = {}
       local indvAvgLosses = {}
 
+      t1 = sys.clock()
       onmt.utils.Parallel.launch(function(idx)
         sys.tic()
         _G.profiler = onmt.utils.Profiler.new(doProfile)
@@ -213,6 +214,8 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
         epochProfiler:add(profile)
       end)
 
+      t2 = sys.clock()
+
       -- Accumulate the gradients from the different parallel threads.
       onmt.utils.Parallel.accGradParams(self.gradParams, batches)
 
@@ -222,6 +225,8 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
 
       -- Synchronize the parameters with the different parallel threads.
       onmt.utils.Parallel.syncParams(self.params)
+      t3 = sys.clock()
+      print(string.format('launch %.3f sync %.3f total %.3f OMP %d', (t2-t1), (t3-t2), (t3-t1), torch.getnumthreads()))
 
       for bi = 1, #batches do
         epochState:update(self.model, batches[bi], losses[bi])

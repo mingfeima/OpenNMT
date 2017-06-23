@@ -72,11 +72,13 @@ function Parallel.init(opt)
           _G.logger = globalLogger
           _G.profiler = globalProfiler
           torch.setnumthreads(ompThreads)
+          --torch.setnumthreads(1)
         end
       ) -- dedicate threads to GPUs
       Parallel._pool:specific(true)
     end
 
+    --torch.setnumthreads(1)
     Parallel.usenccl = nil
   end
 end
