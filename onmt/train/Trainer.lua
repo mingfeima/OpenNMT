@@ -141,6 +141,17 @@ function Trainer:eval(data)
   return math.exp(loss / totalWords)
 end
 
+local function sortBatches(a, b)
+  local ratio = 5
+
+  local aIter = (a.sourceLength + ratio * a.targetLength) * math.sqrt(a.size)
+  local bIter = (b.sourceLength + ratio * b.targetLength) * math.sqrt(b.size)
+
+  return aIter < bIter
+end
+
+local sortedBatches = {}
+
 function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
   local function getBatchIdx(idx)
     return batchOrder and batchOrder[idx] or idx
@@ -169,6 +180,14 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
   local optim = self.optim
   local doProfile = self.args.profiler
 
+  --sort batches
+  if #sortedBatches == 0 then
+    for i = 1, data:batchCount() do
+      table.insert(sortedBatches, data:getBatch(i))
+      table.sort(sortedBatches, sortBatches)
+    end
+  end
+
   if not self.args.async_parallel then
     -- Synchronous training.
     local iter = startIteration
@@ -178,8 +197,9 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
       needLog = true
 
       for j = 1, math.min(onmt.utils.Parallel.count, data:batchCount() - i + 1) do
-        local batchIdx = getBatchIdx(i + j - 1)
-        table.insert(batches, data:getBatch(batchIdx))
+        --local batchIdx = getBatchIdx(i + j - 1)
+        --table.insert(batches, data:getBatch(batchIdx))
+        table.insert(batches, sortedBatches[i + j -1])
         totalSize = totalSize + batches[#batches].size
       end
       local losses = {}
@@ -202,7 +222,13 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
         optim:zeroGrad(_G.gradParams)
         local loss, indvAvgLoss = _G.model:trainNetwork(_G.batch)
 
-        print(string.format('TH [%d] OMP %d time %.3f sec', __threadid, torch.getnumthreads(), sys.toc()))
+        print(string.format('Index [%d] OMP %d time %.3f sec Batch: sourceLength: %d, targetLength: %d, size %d',
+            idx,
+            torch.getnumthreads(),
+            sys.toc(),
+            _G.batch.sourceLength,
+            _G.batch.targetLength,
+            _G.batch.size))
 
         return idx, loss, indvAvgLoss, _G.profiler:dump()
       end,
