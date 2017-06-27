@@ -28,6 +28,7 @@ onmt.utils.CrayonLogger.declareOpts(cmd)
 onmt.utils.Cuda.declareOpts(cmd)
 onmt.utils.Logger.declareOpts(cmd)
 onmt.utils.Parallel.declareOpts(cmd)
+onmt.utils.Dist.declareOpts(cmd)
 
 cmd:text('')
 cmd:text('Other options')
@@ -139,6 +140,7 @@ local function main()
   _G.profiler = onmt.utils.Profiler.new(false)
 
   onmt.utils.Cuda.init(opt)
+  onmt.utils.Dist.init(opt)
   onmt.utils.Parallel.init(opt)
 
   _G.logger:info('Training ' .. modelClass.modelName() .. ' model...')
@@ -174,6 +176,7 @@ local function main()
   trainer:train(trainData, validData, trainStates)
 
   _G.logger:shutDown()
+  onmt.utils.Dist.finish()
 end
 
 main()

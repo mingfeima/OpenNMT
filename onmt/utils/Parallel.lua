@@ -12,7 +12,7 @@ local Parallel = {
 
 local options = {
   {
-    '-nparallel', 4,
+    '-nparallel', 1,
     [[Number of parallel threads to run training on CPU.]]
   },
   {
@@ -100,6 +100,8 @@ end
 
 --[[ Accumulate the gradient parameters from the different parallel threads. ]]
 function Parallel.accGradParams(gradParams, batches)
+  print('gradParams')
+  print(gradParams)
   if Parallel.count > 1 then
     for h = 1, #gradParams[1] do
       local inputs = { gradParams[1][h] }
