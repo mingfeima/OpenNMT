@@ -142,7 +142,7 @@ function Trainer:eval(data)
 end
 
 local function sortBatches(a, b)
-  local ratio = 5
+  local ratio = 3
 
   local aIter = (a.sourceLength + ratio * a.targetLength) * math.sqrt(a.size)
   local bIter = (b.sourceLength + ratio * b.targetLength) * math.sqrt(b.size)
