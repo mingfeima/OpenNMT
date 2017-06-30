@@ -184,8 +184,8 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
   if #sortedBatches == 0 then
     for i = 1, data:batchCount() do
       table.insert(sortedBatches, data:getBatch(i))
-      table.sort(sortedBatches, sortBatches)
     end
+    table.sort(sortedBatches, sortBatches)
   end
 
   if not self.args.async_parallel then
