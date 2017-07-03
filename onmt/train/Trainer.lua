@@ -222,13 +222,13 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
         optim:zeroGrad(_G.gradParams)
         local loss, indvAvgLoss = _G.model:trainNetwork(_G.batch)
 
-        print(string.format('Index [%d] OMP %d time %.3f sec Batch: sourceLength: %d, targetLength: %d, size %d',
+        --[[print(string.format('Index [%d] OMP %d time %.3f sec Batch: sourceLength: %d, targetLength: %d, size %d',
             idx,
             torch.getnumthreads(),
             sys.toc(),
             _G.batch.sourceLength,
             _G.batch.targetLength,
-            _G.batch.size))
+            _G.batch.size))]]--
 
         return idx, loss, indvAvgLoss, _G.profiler:dump()
       end,
@@ -252,7 +252,7 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
       -- Synchronize the parameters with the different parallel threads.
       onmt.utils.Parallel.syncParams(self.params)
       t3 = sys.clock()
-      print(string.format('launch %.3f sync %.3f total %.3f OMP %d', (t2-t1), (t3-t2), (t3-t1), torch.getnumthreads()))
+      --print(string.format('launch %.3f sync %.3f total %.3f OMP %d', (t2-t1), (t3-t2), (t3-t1), torch.getnumthreads()))
 
       for bi = 1, #batches do
         epochState:update(self.model, batches[bi], losses[bi])
