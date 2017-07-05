@@ -64,6 +64,11 @@ local options = {
       valid = onmt.utils.ExtendedCmdLine.isUInt(),
       train_state = true
     }
+  },
+  {
+    '-benchmark', false,
+    [[Order minibatches based on source length, target length and source/target size to achieve
+      better overall performance]]
   }
 }
 
@@ -141,7 +146,7 @@ function Trainer:eval(data)
   return math.exp(loss / totalWords)
 end
 
-local function sortBatches(a, b)
+local function sortFunc(a, b)
   local ratio = 3
 
   local aIter = (a.sourceLength + ratio * a.targetLength) * math.sqrt(a.size)
@@ -180,12 +185,12 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
   local optim = self.optim
   local doProfile = self.args.profiler
 
-  --sort batches
-  if #sortedBatches == 0 then
+  -- Reorder minibatches
+  if self.args.benchmark and #sortedBatches == 0 then
     for i = 1, data:batchCount() do
       table.insert(sortedBatches, data:getBatch(i))
     end
-    table.sort(sortedBatches, sortBatches)
+    table.sort(sortedBatches, sortFunc)
   end
 
   if not self.args.async_parallel then
@@ -197,9 +202,12 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
       needLog = true
 
       for j = 1, math.min(onmt.utils.Parallel.count, data:batchCount() - i + 1) do
-        --local batchIdx = getBatchIdx(i + j - 1)
-        --table.insert(batches, data:getBatch(batchIdx))
-        table.insert(batches, sortedBatches[i + j -1])
+        if self.args.benchmark then
+          table.insert(batches, sortedBatches[i + j -1])
+        else
+          local batchIdx = getBatchIdx(i + j - 1)
+          table.insert(batches, data:getBatch(batchIdx))
+        end
         totalSize = totalSize + batches[#batches].size
       end
       local losses = {}
@@ -252,7 +260,9 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
       -- Synchronize the parameters with the different parallel threads.
       onmt.utils.Parallel.syncParams(self.params)
       t3 = sys.clock()
-      --print(string.format('launch %.3f sync %.3f total %.3f OMP %d', (t2-t1), (t3-t2), (t3-t1), torch.getnumthreads()))
+      --if self.args.benchmark then
+        --print(string.format('launch %.3f sync %.3f total %.3f OMP %d', (t2-t1), (t3-t2), (t3-t1), torch.getnumthreads()))
+      --end
 
       for bi = 1, #batches do
         epochState:update(self.model, batches[bi], losses[bi])
