@@ -46,7 +46,7 @@ end
 
 function Parallel.init(opt)
   Parallel.count = opt.nparallel
-  Parallel.ompThreads = math.min(opt.nompthreads, math.floor(torch.getnumcores()/Parallel.count))
+  Parallel.ompThreads = math.min(opt.nompthreads, math.floor(torch.getnumthreads()/Parallel.count))
   _G.logger:info("Running "..Parallel.count.." parallel threads")
   _G.logger:info("OMP num threads "..Parallel.ompThreads)
 
