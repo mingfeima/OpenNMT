@@ -15,7 +15,7 @@ local options = {
     [[Use distributed training via TorchMPI]]
   },
   {
-    '-debug_print', true,
+    '-debug_print', false,
     [[Use debug print mode with MPI info]]
   }
 }
@@ -34,7 +34,9 @@ local function initPrint(opt)
     end
   else
     -- print only on host node
-    print = function() end
+    if Dist.rank > 1 then
+      print = function() end
+    end
   end
 end
 

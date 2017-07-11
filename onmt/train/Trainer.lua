@@ -129,7 +129,7 @@ function Trainer:__init(args, model, dicts, firstBatch)
   end)
 end
 
-function Trainer:eval(data)
+--[[function Trainer:eval(data)
   local loss = 0
   local totalWords = 0
 
@@ -144,19 +144,17 @@ function Trainer:eval(data)
   self.model:training()
 
   return math.exp(loss / totalWords)
-end
+end]]--
 
-function Trainer:evalDist(data)
+function Trainer:eval(data)
   local loss = 0
   local totalWords = 0
 
   self.model:evaluate()
-  print(data:batchCount())
 
   for i = 1, data:batchCount(), onmt.utils.Dist.size do
     local index = i + onmt.utils.Dist.rank - 1
     if index <= data:batchCount() then
-      --local index = math.min(i + onmt.utils.Dist.rank - 1, data:batchCount())
       local batch = data:getBatch(index)
       loss = loss + self.model:forwardComputeLoss(batch)
       totalWords = totalWords + self.model:getOutputLabelsCount(batch)
@@ -166,12 +164,8 @@ function Trainer:evalDist(data)
   self.model:training()
 
   -- synchronize loss and totalWords across ranks
-  print(string.format('before %.2f %.2f', loss, totalWords))
-  --onmt.utils.Dist.mpi.allreduce_double(loss)
-  --onmt.utils.Dist.mpi.allreduce_double(totalWords)
   loss = onmt.utils.Dist.allreduce(loss)
   totalWords = onmt.utils.Dist.allreduce(totalWords)
-  print(string.format('after %.2f %.2f', loss, totalWords))
 
   return math.exp(loss / totalWords)
 end
@@ -288,7 +282,7 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
       -- Synchronize the parameters with the different parallel threads.
       -- onmt.utils.Dist.syncParams(self.params)
       t3 = sys.clock()
-      print(string.format('idx %d launch %.3f sync %.3f total %.3f OMP %d src length %d',index, (t2-t1), (t3-t2), (t3-t1), torch.getnumthreads(), _G.batch.sourceLength))
+      -- print(string.format('idx %d launch %.3f sync %.3f total %.3f OMP %d src length %d',index, (t2-t1), (t3-t2), (t3-t1), torch.getnumthreads(), _G.batch.sourceLength))
 
       for bi = 1, #batches do
         epochState:update(self.model, batches[bi], losses[bi])
@@ -449,20 +443,14 @@ function Trainer:train(trainData, validData, trainStates)
     end
 
     local epochState = self:trainEpoch(trainData, epoch, self.args.start_iteration, batchOrder)
-    t1 = sys.clock()
     local validPpl = self:eval(validData)
-    t2 = sys.clock()
-    local validPplDist = self:evalDist(validData)
-    t3 = sys.clock()
 
-    --_G.logger:info('Validation perplexity: %.2f', validPpl)
-    _G.logger:info('Validation perplexity: %.2f time %.3f', validPpl, (t2-t1))
-    _G.logger:info('Validation perplexity dist: %.2f time %.3f', validPplDist, (t3-t2))
+    _G.logger:info('Validation perplexity: %.2f', validPpl)
 
     self.optim:updateLearningRate(validPpl, epoch)
 
     unsavedEpochs = unsavedEpochs + 1
-    if unsavedEpochs == self.args.save_every_epochs then
+    if unsavedEpochs == self.args.save_every_epochs and onmt.utils.Dist.rank == 1 then
       self.saver:saveEpoch(validPpl, epochState)
       unsavedEpochs = 0
     end
