@@ -39,25 +39,37 @@ local function initPrint(opt)
 end
 
 function Dist.init(opt)
-  Dist.mpi = require('torchmpi')
-  Dist.mpi.start(Dist.usegpu)
-  Dist.mpinn = require('torchmpi.nn')
+  if opt.use_dist then
+    Dist.mpi = require('torchmpi')
+    Dist.mpi.start(Dist.usegpu)
 
-  -- indexing from 1
-  Dist.rank = Dist.mpi.rank() + 1
-  Dist.size = Dist.mpi.size()
+    -- indexing from 1
+    Dist.rank = Dist.mpi.rank() + 1
+    Dist.size = Dist.mpi.size()
 
-  initPrint(opt)
+    initPrint(opt)
+  end
 end
 
---[[ Accumulate the gradient parameters from the different parallel threads. ]]
-function Dist.accGradParams()
-  return nil
+--[[ Accumulate the gradient parameters from the different nodes. ]]
+function Dist.accGradParams(gradParams)
+  for h = 1, #gradParams[1] do
+    Dist.mpi.allreduceTensor(gradParams[1][h])
+  end
 end
 
---[[ Sync parameters from main model to different parallel threads. ]]
-function Dist.syncParams()
-  return nil
+--[[ Sync parameters from main model to different nodes. ]]
+function Dist.syncParams(params)
+  for h = 1, #params[1] do
+    Dist.mpi.broadcastTensor(0, params[1][h])
+  end
+end
+
+--[[ All reduce across different nodes]]
+function Dist.allreduce(scalar)
+  scalarTensor = torch.Tensor({scalar})
+  Dist.mpi.allreduceTensor(scalarTensor)
+  return scalarTensor[1]
 end
 
 function Dist.finish()

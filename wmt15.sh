@@ -1,8 +1,8 @@
 #!/bin/sh
 
 path=data/wmt15-de-en
-nparallel=4
-lr=0.006
+nparallel=16
+lr=0.0032
 
 optim=adam
 

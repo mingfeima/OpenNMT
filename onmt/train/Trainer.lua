@@ -146,6 +146,36 @@ function Trainer:eval(data)
   return math.exp(loss / totalWords)
 end
 
+function Trainer:evalDist(data)
+  local loss = 0
+  local totalWords = 0
+
+  self.model:evaluate()
+  print(data:batchCount())
+
+  for i = 1, data:batchCount(), onmt.utils.Dist.size do
+    local index = i + onmt.utils.Dist.rank - 1
+    if index <= data:batchCount() then
+      --local index = math.min(i + onmt.utils.Dist.rank - 1, data:batchCount())
+      local batch = data:getBatch(index)
+      loss = loss + self.model:forwardComputeLoss(batch)
+      totalWords = totalWords + self.model:getOutputLabelsCount(batch)
+    end
+  end
+
+  self.model:training()
+
+  -- synchronize loss and totalWords across ranks
+  print(string.format('before %.2f %.2f', loss, totalWords))
+  --onmt.utils.Dist.mpi.allreduce_double(loss)
+  --onmt.utils.Dist.mpi.allreduce_double(totalWords)
+  loss = onmt.utils.Dist.allreduce(loss)
+  totalWords = onmt.utils.Dist.allreduce(totalWords)
+  print(string.format('after %.2f %.2f', loss, totalWords))
+
+  return math.exp(loss / totalWords)
+end
+
 local function sortFunc(a, b)
   local ratio = 3
 
@@ -173,8 +203,8 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
 
   local numIterations = data:batchCount()
   -- In parallel mode, the number of iterations is reduced to reflect larger batch size.
-  if onmt.utils.Parallel.count > 1 and not self.args.async_parallel then
-    numIterations = math.ceil(numIterations / onmt.utils.Parallel.count)
+  if onmt.utils.Dist.size > 1 and not self.args.async_parallel then
+    numIterations = math.ceil(numIterations / onmt.utils.Dist.size)
   end
 
   local epochState = onmt.train.EpochState.new(epoch, startIteration, numIterations, self.optim:getLearningRate(), self.optim:status())
@@ -194,22 +224,20 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
   end
 
   if not self.args.async_parallel then
+    -- Synchronize the parameters across ranks at start of epoch 
+    onmt.utils.Dist.syncParams(self.params)
     -- Synchronous training.
     local iter = startIteration
-    for i = startIteration, data:batchCount(), onmt.utils.Parallel.count do
+    for i = startIteration, data:batchCount(), onmt.utils.Dist.size do
       local batches = {}
       local totalSize = 0
       needLog = true
 
-      for j = 1, math.min(onmt.utils.Parallel.count, data:batchCount() - i + 1) do
-        if self.args.benchmark then
-          table.insert(batches, sortedBatches[i + j -1])
-        else
-          local batchIdx = getBatchIdx(i + j - 1)
-          table.insert(batches, data:getBatch(batchIdx))
-        end
-        totalSize = totalSize + batches[#batches].size
-      end
+      local index = math.min(i + onmt.utils.Dist.rank - 1, data:batchCount())
+      local batchIdx = getBatchIdx(index)
+      table.insert(batches, data:getBatch(batchIdx))
+      totalSize = totalSize + batches[#batches].size
+
       local losses = {}
       local indvAvgLosses = {}
 
@@ -231,7 +259,7 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
         local loss, indvAvgLoss = _G.model:trainNetwork(_G.batch)
 
         --[[print(string.format('Index [%d] OMP %d time %.3f sec Batch: sourceLength: %d, targetLength: %d, size %d',
-            idx,
+            index,
             torch.getnumthreads(),
             sys.toc(),
             _G.batch.sourceLength,
@@ -251,18 +279,16 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
       t2 = sys.clock()
 
       -- Accumulate the gradients from the different parallel threads.
-      onmt.utils.Parallel.accGradParams(self.gradParams, batches)
+      onmt.utils.Dist.accGradParams(self.gradParams)
 
       -- Update the parameters.
       self.optim:prepareGrad(self.gradParams[1])
       self.optim:updateParams(self.params[1], self.gradParams[1])
 
       -- Synchronize the parameters with the different parallel threads.
-      onmt.utils.Parallel.syncParams(self.params)
+      -- onmt.utils.Dist.syncParams(self.params)
       t3 = sys.clock()
-      --if self.args.benchmark then
-        --print(string.format('launch %.3f sync %.3f total %.3f OMP %d', (t2-t1), (t3-t2), (t3-t1), torch.getnumthreads()))
-      --end
+      print(string.format('idx %d launch %.3f sync %.3f total %.3f OMP %d src length %d',index, (t2-t1), (t3-t2), (t3-t1), torch.getnumthreads(), _G.batch.sourceLength))
 
       for bi = 1, #batches do
         epochState:update(self.model, batches[bi], losses[bi])
@@ -423,9 +449,15 @@ function Trainer:train(trainData, validData, trainStates)
     end
 
     local epochState = self:trainEpoch(trainData, epoch, self.args.start_iteration, batchOrder)
+    t1 = sys.clock()
     local validPpl = self:eval(validData)
+    t2 = sys.clock()
+    local validPplDist = self:evalDist(validData)
+    t3 = sys.clock()
 
-    _G.logger:info('Validation perplexity: %.2f', validPpl)
+    --_G.logger:info('Validation perplexity: %.2f', validPpl)
+    _G.logger:info('Validation perplexity: %.2f time %.3f', validPpl, (t2-t1))
+    _G.logger:info('Validation perplexity dist: %.2f time %.3f', validPplDist, (t3-t2))
 
     self.optim:updateLearningRate(validPpl, epoch)
 
