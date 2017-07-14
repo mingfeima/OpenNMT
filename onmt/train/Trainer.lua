@@ -263,7 +263,7 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
       onmt.utils.Parallel.syncParams(self.params)
       t5 = sys.clock()
       --if self.args.benchmark then
-        --print(string.format('launch %.3f syncGrad %.3f %.3f update %.3f syncParams %.3f total %.3f OMP %d', (t2-t1), (t3-t2), (t4-t3), (t5-t4), (t5-t1), torch.getnumthreads()))
+        --print(string.format('launch %.3f syncGrad %.3f update %.3f syncParams %.3f total %.3f OMP %d', (t2-t1), (t3-t2), (t4-t3), (t5-t4), (t5-t1), torch.getnumthreads()))
       --end
 
       for bi = 1, #batches do
