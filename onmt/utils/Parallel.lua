@@ -16,7 +16,7 @@ local options = {
     [[Number of parallel threads to run training on CPU.]]
   },
   {
-    '-nompthreads', 44,
+    '-nompthreads', 72,
     [[Number of OpenMP threads used by each parallel thread.]]
   }
 }
