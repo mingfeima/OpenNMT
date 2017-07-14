@@ -275,14 +275,15 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
       -- Accumulate the gradients from the different parallel threads.
       onmt.utils.Dist.accGradParams(self.gradParams)
 
+      t3 = sys.clock()
       -- Update the parameters.
       self.optim:prepareGrad(self.gradParams[1])
       self.optim:updateParams(self.params[1], self.gradParams[1])
 
       -- Synchronize the parameters with the different parallel threads.
       -- onmt.utils.Dist.syncParams(self.params)
-      t3 = sys.clock()
-      -- print(string.format('idx %d launch %.3f sync %.3f total %.3f OMP %d src length %d',index, (t2-t1), (t3-t2), (t3-t1), torch.getnumthreads(), _G.batch.sourceLength))
+      t4 = sys.clock()
+      -- print(string.format('idx %d launch %.3f sync %.3f update %.3f total %.3f OMP %d src length %d',index, (t2-t1), (t3-t2), (t4-t3), (t4-t1), torch.getnumthreads(), _G.batch.sourceLength))
 
       for bi = 1, #batches do
         epochState:update(self.model, batches[bi], losses[bi])
