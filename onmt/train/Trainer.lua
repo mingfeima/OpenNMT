@@ -135,27 +135,23 @@ function Trainer:eval(data)
 
   self.model:evaluate()
 
-  for i = 1, data:batchCount() do
-    local batch = onmt.utils.Cuda.convert(data:getBatch(i))
-    loss = loss + self.model:forwardComputeLoss(batch)
-    totalWords = totalWords + self.model:getOutputLabelsCount(batch)
+  for i = 1, data:batchCount(), onmt.utils.Dist.size do
+    local index = i + onmt.utils.Dist.rank - 1
+    if index <= data:batchCount() then
+      local batch = onmt.utils.Cuda.convert(data:getBatch(index))
+      loss = loss + self.model:forwardComputeLoss(batch)
+      totalWords = totalWords + self.model:getOutputLabelsCount(batch)
+    end
   end
 
   self.model:training()
 
+  -- synchronize loss and totalWords across ranks
+  loss = onmt.utils.Dist.allreduce(loss)
+  totalWords = onmt.utils.Dist.allreduce(totalWords)
+
   return math.exp(loss / totalWords)
 end
-
-local function sortFunc(a, b)
-  local ratio = 3
-
-  local aIter = (a.sourceLength + ratio * a.targetLength) * math.sqrt(a.size)
-  local bIter = (b.sourceLength + ratio * b.targetLength) * math.sqrt(b.size)
-
-  return aIter < bIter
-end
-
-local sortedBatches = {}
 
 function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
   local function getBatchIdx(idx)
@@ -172,9 +168,11 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
   startIteration = startIteration or 1
 
   local numIterations = data:batchCount()
-  -- In parallel mode, the number of iterations is reduced to reflect larger batch size.
-  if onmt.utils.Parallel.count > 1 and not self.args.async_parallel then
-    numIterations = math.ceil(numIterations / onmt.utils.Parallel.count)
+  -- Use Dist for inter node communication
+  -- Use Parallel for intra node communication
+  -- In Dist/Parallel mode, the number of iterations is reduced to reflect larger batch size.
+  if onmt.utils.Parallel.count * onmt.utils.Dist.size > 1 and not self.args.async_parallel then
+    numIterations = math.ceil(numIterations / (onmt.utils.Parallel.count * onmt.utils.Dist.size))
   end
 
   local epochState = onmt.train.EpochState.new(epoch, startIteration, numIterations, self.optim:getLearningRate(), self.optim:status())
@@ -185,37 +183,31 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
   local optim = self.optim
   local doProfile = self.args.profiler
 
-  -- Reorder minibatches
-  if self.args.benchmark and #sortedBatches == 0 then
-    for i = 1, data:batchCount() do
-      table.insert(sortedBatches, data:getBatch(i))
-    end
-    table.sort(sortedBatches, sortFunc)
-  end
-
   if not self.args.async_parallel then
     -- Synchronous training.
+    -- Synchronize the parameters across ranks/threads at start of epoch
+    onmt.utils.Dist.syncParams(self.params)
+    onmt.utils.Parallel.syncParams(self.params)
+
     local iter = startIteration
-    for i = startIteration, data:batchCount(), onmt.utils.Parallel.count do
+    for i = startIteration, data:batchCount(), onmt.utils.Parallel.count * onmt.utils.Dist.size do
       local batches = {}
       local totalSize = 0
       needLog = true
 
-      for j = 1, math.min(onmt.utils.Parallel.count, data:batchCount() - i + 1) do
-        if self.args.benchmark then
-          table.insert(batches, sortedBatches[i + j -1])
-        else
-          local batchIdx = getBatchIdx(i + j - 1)
-          table.insert(batches, data:getBatch(batchIdx))
-        end
+      local rankOffset = (onmt.utils.Dist.rank - 1) * onmt.utils.Parallel.count
+      for j = 1, math.min(onmt.utils.Parallel.count, data:batchCount() - rankOffset - i + 1) do
+        local batchIdx = i + rankOffset + j - 1
+        batchIdx = getBatchIdx(batchIdx)
+        table.insert(batches, data:getBatch(batchIdx))
         totalSize = totalSize + batches[#batches].size
       end
+
       local losses = {}
       local indvAvgLosses = {}
 
       t1 = sys.clock()
       onmt.utils.Parallel.launch(function(idx)
-        sys.tic()
         _G.profiler = onmt.utils.Profiler.new(doProfile)
 
         _G.batch = batches[idx]
@@ -230,14 +222,6 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
         optim:zeroGrad(_G.gradParams)
         local loss, indvAvgLoss = _G.model:trainNetwork(_G.batch)
 
-        --[[print(string.format('Index [%d] OMP %d time %.3f sec Batch: sourceLength: %d, targetLength: %d, size %d',
-            idx,
-            torch.getnumthreads(),
-            sys.toc(),
-            _G.batch.sourceLength,
-            _G.batch.targetLength,
-            _G.batch.size))]]--
-
         return idx, loss, indvAvgLoss, _G.profiler:dump()
       end,
       function(idx, loss, indvAvgLoss, profile)
@@ -250,21 +234,23 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
 
       t2 = sys.clock()
 
-      -- Accumulate the gradients from the different parallel threads.
+      -- Accumulate the gradients from the different parallel threads and dist ranks.
       onmt.utils.Parallel.accGradParams(self.gradParams, batches)
-
       t3 = sys.clock()
+      onmt.utils.Dist.accGradParams(self.gradParams)
+
+      t4 = sys.clock()
       -- Update the parameters.
       self.optim:prepareGrad(self.gradParams[1])
       self.optim:updateParams(self.params[1], self.gradParams[1])
 
-      t4 = sys.clock()
+      t5 = sys.clock()
       -- Synchronize the parameters with the different parallel threads.
       onmt.utils.Parallel.syncParams(self.params)
-      t5 = sys.clock()
-      --if self.args.benchmark then
-        --print(string.format('launch %.3f syncGrad %.3f update %.3f syncParams %.3f total %.3f OMP %d', (t2-t1), (t3-t2), (t4-t3), (t5-t4), (t5-t1), torch.getnumthreads()))
-      --end
+      t6 = sys.clock()
+      
+      print(string.format('launch %.3f syncGrad %.3f dist %.3f update %.3f syncParams %.3f total %.3f OMP %d', 
+        (t2-t1), (t3-t2), (t4-t3), (t5-t4), (t6-t5), (t6-t1), torch.getnumthreads()))
 
       for bi = 1, #batches do
         epochState:update(self.model, batches[bi], losses[bi])

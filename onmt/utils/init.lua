@@ -2,6 +2,7 @@ local utils = {}
 
 utils.Cuda = require('onmt.utils.Cuda')
 utils.Dict = require('onmt.utils.Dict')
+utils.Dist = require('onmt.utils.Dist')
 utils.SubDict = require('onmt.utils.SubDict')
 utils.FileReader = require('onmt.utils.FileReader')
 utils.Tensor = require('onmt.utils.Tensor')
