@@ -155,7 +155,7 @@ function Optim:updateLearningRate(score, epoch)
     self.args.learning_rate = self.args.learning_rate * self.args.learning_rate_decay
   end
 
-  if self.args.optim == 'sgd' then
+  if self.args.optim == 'sgd' or self.args.optim == 'adam' then
     self.valPerf[#self.valPerf + 1] = score
 
     local epochCondMet = (epoch >= self.args.start_decay_at)

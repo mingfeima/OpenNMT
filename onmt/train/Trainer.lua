@@ -249,8 +249,8 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
       onmt.utils.Parallel.syncParams(self.params)
       t6 = sys.clock()
       
-      print(string.format('launch %.3f syncGrad %.3f dist %.3f update %.3f syncParams %.3f total %.3f OMP %d', 
-        (t2-t1), (t3-t2), (t4-t3), (t5-t4), (t6-t5), (t6-t1), torch.getnumthreads()))
+      --print(string.format('launch %.3f syncGrad %.3f dist %.3f update %.3f syncParams %.3f total %.3f OMP %d', 
+      --  (t2-t1), (t3-t2), (t4-t3), (t5-t4), (t6-t5), (t6-t1), torch.getnumthreads()))
 
       for bi = 1, #batches do
         epochState:update(self.model, batches[bi], losses[bi])
