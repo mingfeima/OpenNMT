@@ -34,8 +34,13 @@ end
 
 --[[ Log to status stdout. ]]
 function EpochState:log(iteration)
-  local ppl = math.exp(self.trainLoss / self.targetWords)
-  local tokpersec = self.sourceWords / self.timer:time().real
+  -- Synchronize across ranks
+  local _trainLoss = onmt.utils.Dist.allreduce(self.trainLoss)
+  local _targetWords = onmt.utils.Dist.allreduce(self.targetWords)
+  local _sourceWords = onmt.utils.Dist.allreduce(self.sourceWords)
+  
+  local ppl = math.exp(_trainLoss / _targetWords)
+  local tokpersec = _sourceWords / self.timer:time().real
   _G.logger:info('Epoch %d ; Iteration %d/%d ; %s ; Source tokens/s %d ; Perplexity %.2f ; Time %.3f sec',
                   self.epoch,
                   iteration or self.iterations, self.numIterations,
