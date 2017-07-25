@@ -146,7 +146,7 @@ function Trainer:eval(data)
 
   self.model:training()
 
-  -- synchronize loss and totalWords across ranks
+  -- Synchronize loss and totalWords across ranks
   loss = onmt.utils.Dist.allreduce(loss)
   totalWords = onmt.utils.Dist.allreduce(totalWords)
 
