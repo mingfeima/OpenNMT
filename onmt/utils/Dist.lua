@@ -55,27 +55,37 @@ end
 
 --[[ Accumulate the gradient parameters from the different nodes. ]]
 function Dist.accGradParams(gradParams)
-  for h = 1, #gradParams[1] do
-    Dist.mpi.allreduceTensor(gradParams[1][h])
+  if Dist.size > 1 then
+    for h = 1, #gradParams[1] do
+      Dist.mpi.allreduceTensor(gradParams[1][h])
+    end
   end
 end
 
 --[[ Sync parameters from main model to different nodes. ]]
 function Dist.syncParams(params)
-  for h = 1, #params[1] do
-    Dist.mpi.broadcastTensor(0, params[1][h])
+  if Dist.size > 1 then
+    for h = 1, #params[1] do
+      Dist.mpi.broadcastTensor(0, params[1][h])
+    end
   end
 end
 
 --[[ All reduce across different nodes]]
 function Dist.allreduce(scalar)
-  scalarTensor = torch.Tensor({scalar})
-  Dist.mpi.allreduceTensor(scalarTensor)
-  return scalarTensor[1]
+  if Dist.size > 1 then
+    scalarTensor = torch.Tensor({scalar})
+    Dist.mpi.allreduceTensor(scalarTensor)
+    return scalarTensor[1]
+  else
+    return scalar
+  end
 end
 
 function Dist.finish()
-  Dist.mpi.stop()
+  if opt.use_dist then
+    Dist.mpi.stop()
+  end
 end 
 
 return Dist
