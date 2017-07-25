@@ -409,8 +409,8 @@ function Trainer:train(trainData, validData, trainStates)
     if not batchOrder and epoch > self.args.curriculum then
       batchOrder = torch.randperm(trainData:batchCount())
       -- Broadcast batch order from 1st rank to rest
-      if onmt.utils.dist.size > 1 then
-        onmt.utils.dist.mpi.broadcastTensor(0, batchOrder)
+      if onmt.utils.Dist.size > 1 then
+        onmt.utils.Dist.mpi.broadcastTensor(0, batchOrder)
       end
     end
 
