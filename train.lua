@@ -132,6 +132,7 @@ end
 local function main()
   local opt = cmd:parse(arg)
 
+  torch.setdefaulttensortype("torch.FloatTensor")
   torch.manualSeed(opt.seed)
 
   -- Initialize global context.
