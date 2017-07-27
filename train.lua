@@ -177,7 +177,7 @@ local function main()
   trainer:train(trainData, validData, trainStates)
 
   _G.logger:shutDown()
-  onmt.utils.Dist.finish()
+  onmt.utils.Dist.finish(opt)
 end
 
 main()

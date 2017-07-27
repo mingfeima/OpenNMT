@@ -82,7 +82,7 @@ function Dist.allreduce(scalar)
   end
 end
 
-function Dist.finish()
+function Dist.finish(opt)
   if opt.use_dist then
     Dist.mpi.stop()
   end
