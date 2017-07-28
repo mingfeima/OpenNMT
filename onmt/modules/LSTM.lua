@@ -93,8 +93,19 @@ function LSTM:_buildModel(layers, inputSize, hiddenSize, dropout, residual, drop
   return nn.gModule(inputs, outputs)
 end
 
---[[ Build a single LSTM unit layer. ]]
+--[[ Build a single LSTM unit layer with C implementation]]
 function LSTM:_buildLayer(inputSize, hiddenSize)
+  local inputs = {}
+  table.insert(inputs, nn.Identity()())
+  table.insert(inputs, nn.Identity()())
+  table.insert(inputs, nn.Identity()())
+
+  local out = nn.LSTM(inputSize, hiddenSize)(inputs)
+  return nn.gModule(inputs, {out})
+end
+
+--[[ Build a single LSTM unit layer. ]]
+function LSTM:_buildLayerNngraph(inputSize, hiddenSize)
   local inputs = {}
   table.insert(inputs, nn.Identity()())
   table.insert(inputs, nn.Identity()())

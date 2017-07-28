@@ -74,7 +74,7 @@ end
 --[[ All reduce across different nodes]]
 function Dist.allreduce(scalar)
   if Dist.size > 1 then
-    scalarTensor = torch.Tensor({scalar})
+    scalarTensor = torch.DoubleTensor({scalar})
     Dist.mpi.allreduceTensor(scalarTensor)
     return scalarTensor[1]
   else
