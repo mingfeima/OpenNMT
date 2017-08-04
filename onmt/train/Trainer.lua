@@ -201,6 +201,8 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
         batchIdx = getBatchIdx(batchIdx)
         table.insert(batches, data:getBatch(batchIdx))
         totalSize = totalSize + batches[#batches].size
+        -- Synchronize totalSize across ranks
+        totalSize = onmt.utils.Dist.allreduce(totalSize)
       end
 
       local losses = {}
@@ -248,7 +250,7 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
       -- Synchronize the parameters with the different parallel threads.
       onmt.utils.Parallel.syncParams(self.params)
       t6 = sys.clock()
-      
+
       --print(string.format('launch %.3f syncGrad %.3f dist %.3f update %.3f syncParams %.3f total %.3f OMP %d', 
       --  (t2-t1), (t3-t2), (t4-t3), (t5-t4), (t6-t5), (t6-t1), torch.getnumthreads()))
 
