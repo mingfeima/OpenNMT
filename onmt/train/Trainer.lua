@@ -201,6 +201,8 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
         batchIdx = getBatchIdx(batchIdx)
         table.insert(batches, data:getBatch(batchIdx))
         totalSize = totalSize + batches[#batches].size
+        -- Synchronize totalSize across ranks
+        totalSize = onmt.utils.Dist.allreduce(totalSize)
       end
 
       local losses = {}
