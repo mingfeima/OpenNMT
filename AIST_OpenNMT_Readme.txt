@@ -6,12 +6,14 @@
 
 Step 0. Make sure you have parallel studio properly installed
   Add the following line in your .bashrc
-    source /opt/intel/compilers_and_libraries/linux/bin/compilervars.sh intel64
+    Excalibur: source /opt/intel/compilers_and_libraries/linux/bin/compilervars.sh intel64
+    Endeavor: source /opt/intel/compiler/latest/bin/compilervars.sh intel64
+              source /opt/intel/impi/latest/impi/2017.3.196/bin64/mpivars.sh
 
 Step 1. Prepare mkl (nightly build version with specific optimization)
   The package has been placed at
-  (excalibur): /home/mingfeim/packages/mkl_nightly_2018_20170712_lnx.tgz
-  (endeavor): /home/mingfeim/packages/mkl_nightly_2018_20170712_lnx.tgz
+    Excalibur: /home/mingfeim/packages/mkl_nightly_2018_20170712_lnx.tgz
+    Endeavor: /home/mingfeim/packages/mkl_nightly_2018_20170712_lnx.tgz
 
   tar zxvf mkl_nightly_2018_20170712_lnx.tgz
 
@@ -37,12 +39,30 @@ Step 2. Install IntelTorch
     libmkl_intel_thread.so => /home/mingfeim/packages/__release_lnx/mkl/lib/intel64/libmkl_intel_thread.so (0x00007fc6b4bd4000)
     libmkl_core.so => /home/mingfeim/packages/__release_lnx/mkl/lib/intel64/libmkl_core.so (0x00007fc6b2e8f000)
 
+  By default IntelTorch will install tds (required by OpenNMT).
+  However installation error might be encountered on Endeavor because failure of internet connection.
+  In that case, just copy tds-master.zip from https://github.com/torch/tds
+    unzip tds-master.zip
+    cd tds-master
+    luarocks make rocks/tds-scm-1.rockspec
+    
 Step 3. Install TorchMPI
   git clone https://github.com/facebookresearch/TorchMPI.git
   cd ./TorchMPI
 
   Compile TorchMPI using intel MPI compiler
   MPI_C_COMPILER=mpiicc MPI_CXX_COMPILER=mpiicpc MPI_CXX_COMPILE_FLAGS="-O3" luarocks make rocks/torchmpi-scm-1.rockspec
+
+  TorchMPI has two additional dependencies: torchnet and mnist
+  Still installation error might be encountered on Endeavor because failure of internet connection.
+  In that case, edit "rocks/torchmpi-scm-1.rockspec", comment LINE20 and LINE21 to skip the dependency installation.
+  e.g.
+    dependencies = {
+       "torch",
+       -- dependencies for the apps:
+       --"torchnet",
+       --"mnist",
+    }
 
 Step 4. Prepare multi node OpenNMT
   git clone https://github.com/mingfeima/OpenNMT.git -b aist
