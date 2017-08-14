@@ -65,7 +65,7 @@ Step 3. Install TorchMPI
     }
 
 Step 4. Prepare multi node OpenNMT
-  git clone https://github.com/mingfeima/OpenNMT.git -b aist-lstm
+  git clone https://github.com/mingfeima/OpenNMT.git -b aist
 
 Step 5. Prepare dataset
   follow http://forum.opennmt.net/t/training-english-german-wmt15-nmt-engine/29
